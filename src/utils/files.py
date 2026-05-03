@@ -423,6 +423,50 @@ class FFIW:
     )
 
 
+class SDFVD2_0:
+    """Small Scale Deep Fake Video Dataset 2.0"""
+
+    train = Files(
+        "config/datasets/SDFVD2.0/train/fake.txt",
+        "config/datasets/SDFVD2.0/train/real.txt",
+    )
+
+    val = Files(
+        "config/datasets/SDFVD2.0/val/fake.txt",
+        "config/datasets/SDFVD2.0/val/real.txt",
+    )
+
+    test = Files(
+        "config/datasets/SDFVD2.0/test/fake.txt",
+        "config/datasets/SDFVD2.0/test/real.txt",
+    )
+
+
+class CDDD:
+    """Celeb-DF Deepfake Detection Dataset prepared for GenD."""
+
+    train = Files(
+        "config/datasets/CDDD/train/fake.txt",
+        "config/datasets/CDDD/train/real.txt",
+    )
+
+    val = Files(
+        "config/datasets/CDDD/val/fake.txt",
+        "config/datasets/CDDD/val/real.txt",
+    )
+
+    # CDDD in-domain reporting uses the validation split; no separate test split is prepared.
+    test = Files(
+        "config/datasets/CDDD/val/fake.txt",
+        "config/datasets/CDDD/val/real.txt",
+    )
+
+    all = Files(
+        "config/datasets/CDDD/all/fake.txt",
+        "config/datasets/CDDD/all/real.txt",
+    )
+
+
 class DeepSpeak_v1_1:
     """https://arxiv.org/abs/2408.05366"""
 

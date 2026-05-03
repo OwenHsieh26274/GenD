@@ -8,6 +8,10 @@ __pycache__
 /weights
 /logs
 /tmp
+/raw_data
+
+.aim
+.codex
 
 x.py
 y.py

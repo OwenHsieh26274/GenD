@@ -119,10 +119,6 @@ def get_debug_config(config: Config) -> Config:
     # config.deterministic = True
     # config.detect_anomaly = True
 
-    config.trn_files = files.FF.train
-    config.val_files = files.FF.val
-    config.tst_files = files.FF.val
-
     return config
 
 

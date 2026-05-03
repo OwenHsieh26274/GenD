@@ -38,7 +38,7 @@ from src.retinaface import RetinaFace, prepare_model
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-DEFAULT_CKPT = "runs/rebuttal/wacv-DINOv3L-LN+L2+UA-U0.5-A0.5-seed0/checkpoints/best_mAP.ckpt"
+DEFAULT_CKPT = "runs/sdfvd2/sdfvd2-DINOv3B-LN+L2+UA/checkpoints/best_mAP.ckpt"
 HF_MODELS = [
     "yermandy/GenD_CLIP_L_14",
     "yermandy/GenD_PE_L",

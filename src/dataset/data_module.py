@@ -1,6 +1,8 @@
 from typing import Callable
 
-from torch.utils.data import DataLoader
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.config import Config
 from src.utils import logger
@@ -50,12 +52,31 @@ class DeepfakeDataModule(BaseDataModule):
             self.test_dataset.print_statistics()
 
     def train_dataloader(self):
+        sampler = None
+        shuffle = True
+
+        if self.config.balanced_train_sampler:
+            labels = np.asarray(self.train_dataset.labels)
+            classes, counts = np.unique(labels, return_counts=True)
+            class_weights = {cls: 1.0 / count for cls, count in zip(classes, counts)}
+            sample_weights = np.asarray([class_weights[label] for label in labels], dtype=np.float64)
+            generator = torch.Generator().manual_seed(self.config.seed)
+            sampler = WeightedRandomSampler(
+                weights=torch.as_tensor(sample_weights, dtype=torch.double),
+                num_samples=len(sample_weights),
+                replacement=True,
+                generator=generator,
+            )
+            shuffle = False
+            logger.print(f"[blue]Using balanced train sampler for classes: {dict(zip(classes.tolist(), counts.tolist()))}")
+
         return DataLoader(
             self.train_dataset,
             batch_size=self.config.mini_batch_size,
             num_workers=self.config.num_workers,
             pin_memory=True,
-            shuffle=True,
+            shuffle=shuffle,
+            sampler=sampler,
             drop_last=True,
         )
 

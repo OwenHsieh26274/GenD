@@ -1,0 +1,76 @@
+from .. import config as C
+from ..config import Config
+from ..utils import files
+
+experiments = {
+    "cddd-DINOv3B-LN+L2+UA": [
+        Config(
+            run_dir="runs/cddd",
+            wandb=False,
+            wandb_tags=["cddd", "dinov3", "gend"],
+            devices="auto",
+            num_workers=8,
+            backbone=C.Backbone.DINOv3_ViT_B,
+            freeze_feature_extractor=True,
+            unfreeze_layers=["norm1", "norm2", "norm"],
+            head=C.Head.NLinear,
+            loss=C.Loss(ce_labels=1.0, uniformity=0.5, alignment_labels=0.5),
+            trn_files=files.CDDD.train,
+            val_files=files.CDDD.val,
+            tst_files={"CDDD": files.CDDD.test},
+            lr=3e-4,
+            min_lr=1e-5,
+            lr_scheduler="cyclic",
+            num_epochs_in_cycle=10,
+            weight_decay=0.0,
+            max_epochs=30,
+            warmup_epochs=1,
+            batch_size=128,
+            mini_batch_size=16,
+            precision="bf16-mixed",
+            throw_exception_if_run_exists=True,
+        )
+    ],
+    "cddd-DINOv3L-LN+L2+UA-Balanced": [
+        Config(
+            run_dir="runs/cddd",
+            wandb=False,
+            wandb_tags=["cddd", "dinov3", "gend", "balanced"],
+            devices="auto",
+            num_workers=8,
+            backbone=C.Backbone.DINOv3_ViT_L,
+            freeze_feature_extractor=True,
+            unfreeze_layers=["norm1", "norm2", "norm"],
+            head=C.Head.NLinear,
+            loss=C.Loss(ce_labels=1.0, uniformity=0.5, alignment_labels=0.5),
+            trn_files=files.CDDD.train,
+            val_files=files.CDDD.val,
+            tst_files={"CDDD": files.CDDD.val},
+            balanced_train_sampler=True,
+            checkpoint_name="best_mAP_frame",
+            monitor_metric="val/mAP_frame",
+            monitor_metric_mode="max",
+            checkpoint_monitors=[
+                C.CheckpointMonitor(filename="best_mAP_frame", monitor="val/mAP_frame", mode="max"),
+                C.CheckpointMonitor(filename="best_auroc_frame", monitor="val/auroc_frame", mode="max"),
+                C.CheckpointMonitor(filename="best_mAP_video", monitor="val/mAP_video", mode="max"),
+            ],
+            post_train_test_checkpoint_names=[
+                "best_mAP_frame",
+                "best_auroc_frame",
+                "best_mAP_video",
+            ],
+            lr=3e-4,
+            min_lr=1e-5,
+            lr_scheduler="cyclic",
+            num_epochs_in_cycle=10,
+            weight_decay=0.0,
+            max_epochs=30,
+            warmup_epochs=1,
+            batch_size=128,
+            mini_batch_size=16,
+            precision="bf16-mixed",
+            throw_exception_if_run_exists=True,
+        )
+    ],
+}

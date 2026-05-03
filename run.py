@@ -8,7 +8,7 @@ from lightning.pytorch import loggers as pl_loggers
 from rich import traceback as rich_traceback
 
 from src import dataset as datasets
-from src.config import Config
+from src.config import CheckpointMonitor, Config
 from src.model.base import BaseDeepakeDetectionModel
 from src.utils import logger
 from src.utils.checks import checks
@@ -70,7 +70,7 @@ def init_loggers(config: Config) -> list:
     if config.wandb:
         wandb_logger = pl_loggers.WandbLogger(
             project="deepfake",
-            name=config.run_name,
+            name=config.wandb_name or config.run_name,
             save_dir=save_dir,
             tags=set(config.wandb_tags),
             group=config.wandb_group,
@@ -80,13 +80,25 @@ def init_loggers(config: Config) -> list:
     return loggers
 
 
-def init_callbacks(config: Config) -> list:
-    callbacks = [
-        pl_callbacks.RichProgressBar(leave=True),
-        ModelCheckpointParallel(
-            filename=config.checkpoint_name, monitor=config.monitor_metric, mode=config.monitor_metric_mode
-        ),
+def get_checkpoint_monitors(config: Config) -> list[CheckpointMonitor]:
+    if config.checkpoint_monitors:
+        return config.checkpoint_monitors
+    return [
+        CheckpointMonitor(
+            filename=config.checkpoint_name,
+            monitor=config.monitor_metric,
+            mode=config.monitor_metric_mode,
+        )
     ]
+
+
+def init_callbacks(config: Config, enable_checkpointing: bool = True) -> list:
+    callbacks = [pl_callbacks.RichProgressBar(leave=True)]
+    if enable_checkpointing:
+        callbacks.extend(
+            ModelCheckpointParallel(filename=monitor.filename, monitor=monitor.monitor, mode=monitor.mode)
+            for monitor in get_checkpoint_monitors(config)
+        )
     # pl_callbacks.LearningRateFinder(1e-5, 1e-2),
 
     if config.early_stopping_patience > 0:
@@ -102,12 +114,58 @@ def init_callbacks(config: Config) -> list:
     return callbacks
 
 
+def init_trainer(config: Config, enable_checkpointing: bool) -> Trainer:
+    return Trainer(
+        devices=config.devices,
+        max_epochs=config.max_epochs,
+        precision=config.precision,
+        accumulate_grad_batches=config.batch_size // config.mini_batch_size,
+        fast_dev_run=config.fast_dev_run,
+        overfit_batches=config.overfit_batches,
+        limit_train_batches=config.limit_train_batches,
+        limit_val_batches=config.limit_val_batches,
+        limit_test_batches=config.limit_test_batches,
+        deterministic=config.deterministic,
+        detect_anomaly=config.detect_anomaly,
+        logger=init_loggers(config),
+        callbacks=init_callbacks(config, enable_checkpointing),
+        default_root_dir=config.run_dir,
+        log_every_n_steps=100,
+    )
+
+
 def finish_wandb_run(trainer, config: Config):
     if config.wandb:
         if any(isinstance(l, pl_loggers.WandbLogger) for l in trainer.loggers):
             wandb_logger = [l for l in trainer.loggers if isinstance(l, pl_loggers.WandbLogger)][0]
             wandb_logger.finalize("success")
             wandb_logger.experiment.finish()
+
+
+def get_post_train_test_checkpoint_names(config: Config) -> list[str]:
+    if config.post_train_test_checkpoint_names:
+        return config.post_train_test_checkpoint_names
+    return [monitor.filename for monitor in get_checkpoint_monitors(config)]
+
+
+def run_checkpoint_test(config: Config, checkpoint_name: str, checkpoint_path: str):
+    test_config = Config(**config.model_dump())
+    test_config.checkpoint = checkpoint_path
+    test_config.run_dir = f"{config.run_dir}/{config.run_name}/checkpoint_tests"
+    test_config.run_name = checkpoint_name
+    test_config.wandb_name = f"{config.run_name}-test-{checkpoint_name}" if config.wandb else None
+    test_config.throw_exception_if_run_exists = False
+    test_config.remove_if_run_exists = True
+
+    checks(test_config)
+    torch.set_float32_matmul_precision("high")
+
+    model = load_model(test_config)
+    model.load_checkpoint(test_config.checkpoint)
+    data_module = datasets.DeepfakeDataModule(test_config, model.get_preprocessing())
+    trainer = init_trainer(test_config, enable_checkpointing=False)
+    trainer.test(model, data_module)
+    finish_wandb_run(trainer, test_config)
 
 
 def main(config: Config, train: bool):
@@ -127,23 +185,7 @@ def main(config: Config, train: bool):
 
     save_dir = f"{config.run_dir}/{config.run_name}"
 
-    trainer = Trainer(
-        devices=config.devices,
-        max_epochs=config.max_epochs,
-        precision=config.precision,
-        accumulate_grad_batches=config.batch_size // config.mini_batch_size,
-        fast_dev_run=config.fast_dev_run,
-        log_every_n_steps=100,
-        overfit_batches=config.overfit_batches,
-        limit_train_batches=config.limit_train_batches,
-        limit_val_batches=config.limit_val_batches,
-        limit_test_batches=config.limit_test_batches,
-        deterministic=config.deterministic,
-        detect_anomaly=config.detect_anomaly,
-        logger=init_loggers(config),
-        callbacks=init_callbacks(config),
-        default_root_dir=config.run_dir,
-    )
+    trainer = init_trainer(config, enable_checkpointing=train)
 
     if train:
         try:
@@ -158,17 +200,29 @@ def main(config: Config, train: bool):
                 f.write(f"Training failed: {e}\n")
                 f.write(traceback.format_exc())
         finally:
-            logger.print_info("Training finished. Starting testing")
-            ckpt_path = f"{save_dir}/checkpoints/{config.checkpoint_name}.ckpt"
-            if not os.path.exists(ckpt_path):
-                logger.print_error(f"Checkpoint {ckpt_path} does not exist. Cannot proceed with testing.")
+            if config.checkpoint_monitors or config.post_train_test_checkpoint_names:
+                finish_wandb_run(trainer, config)
+                logger.print_info("Training finished. Starting checkpoint testing")
+                del trainer, model, data_module
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                for checkpoint_name in get_post_train_test_checkpoint_names(config):
+                    ckpt_path = f"{save_dir}/checkpoints/{checkpoint_name}.ckpt"
+                    if not os.path.exists(ckpt_path):
+                        logger.print_error(f"Checkpoint {ckpt_path} does not exist. Cannot proceed with testing.")
+                        continue
+                    run_checkpoint_test(config, checkpoint_name, ckpt_path)
             else:
-                model.load_checkpoint(ckpt_path)
-                trainer.test(model, data_module)
+                logger.print_info("Training finished. Starting testing")
+                ckpt_path = f"{save_dir}/checkpoints/{config.checkpoint_name}.ckpt"
+                if not os.path.exists(ckpt_path):
+                    logger.print_error(f"Checkpoint {ckpt_path} does not exist. Cannot proceed with testing.")
+                else:
+                    model.load_checkpoint(ckpt_path)
+                    trainer.test(model, data_module)
+                finish_wandb_run(trainer, config)
 
     else:
         assert config.checkpoint is not None, "Checkpoint is required for testing"
         trainer.test(model, data_module)
-
-    # Finish wandb run
-    finish_wandb_run(trainer, config)
+        finish_wandb_run(trainer, config)

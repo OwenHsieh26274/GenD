@@ -84,6 +84,12 @@ class Loss(Validation, validate_assignment=True):
     alignment_labels: float = 0.0  # Loss weight
 
 
+class CheckpointMonitor(Validation, validate_assignment=True):
+    filename: str
+    monitor: str
+    mode: Literal["max", "min"] = "max"
+
+
 class LoRA(Validation, validate_assignment=True):
     target_modules: list[str] | str = ["out_proj"]  # Target modules
     rank: int = 1  # Rank of the decomposition
@@ -171,6 +177,7 @@ class Config(Validation, validate_assignment=True):
     augmentations: None | Augmentations = Augmentations()  # Training augmentations
     test_augmentations: None | Augmentations = None  # Test-time augmentations
     load_pairs: bool = False  # Whether to load csv files with paired videos
+    balanced_train_sampler: bool = False  # Balance class sampling during training
 
     # Optimization configuration
     lr: float = 0.0003  # Learning rate (initial / base)
@@ -201,9 +208,12 @@ class Config(Validation, validate_assignment=True):
     checkpoint_name: str = "best_mAP"  # Checkpoint to use for testing
     monitor_metric: str = "val/mAP_video"  # Metric to monitor for early stopping and checkpointing
     monitor_metric_mode: str = "max"  # Mode for monitoring metric ("max" or "min")
+    checkpoint_monitors: list[CheckpointMonitor] = []  # Additional checkpoint monitors
+    post_train_test_checkpoint_names: list[str] = []  # Checkpoints to test after training
 
     # Logging
     wandb: bool = False  # Log metrics to Weights & Biases
+    wandb_name: None | str = None  # Override W&B run name while keeping local run_name
     wandb_tags: list[str] = []  # Tags to use for Weights & Biases
     wandb_group: None | str = None  # Group to use for Weights & Biases
 
