@@ -66,6 +66,10 @@ python app/run.py
 
 ## Training
 
+### Datasets
+
+To facilitate reproducibility, preprocessed training, validation, and test datasets were uploaded to [Hugging Face](https://huggingface.co/datasets/yermandy/GenD).
+
 ### Set up environment
 
 ``` bash
@@ -156,11 +160,11 @@ We manage links to files using `src/utils/files.py`.
 ### Cite
 
 ``` bibtex
-@InProceedings{GenD,
-  author    = {Yermakov, Andrii and Cech, Jan and Matas, Jiri and Fritz, Mario},
-  title     = {Deepfake Detection that Generalizes Across Benchmarks},
-  booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
-  month     = {March},
-  year      = {2026},
+@inproceedings{GenD,
+    title        = {Deepfake detection that generalizes across benchmarks},
+    author       = {Yermakov, Andrii and Cech, Jan and Matas, Jiri and Fritz, Mario},
+    year         = 2026,
+    booktitle    = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision},
+    pages        = {773--783}
 }
 ```
